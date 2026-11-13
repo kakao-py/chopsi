@@ -1,0 +1,126 @@
+{
+    "bedtimes": {
+        "0": 21.5,
+        "1": 21.5,
+        "2": 21.5,
+        "3": 21.5,
+        "4": 0.0,
+        "5": 0.0,
+        "6": 21.5
+    },
+    "rezerva": 5,
+    "pravidla_intervaly": [
+        [
+            1.0,
+            5.0,
+            0.01,
+            "pomer"
+        ],
+        [
+            5.01,
+            7.95,
+            0.05,
+            "pomer"
+        ],
+        [
+            7.95,
+            24.0,
+            5.0,
+            "pevna"
+        ],
+        [
+            7.95,
+            9.0,
+            0.05,
+            "pomer"
+        ],
+        [
+            9.0,
+            24.0,
+            0.15,
+            "pomer"
+        ]
+    ],
+    "nasobitel_ponocovani": 1.0,
+    "bot_typ": "k",
+    "queue_interval": 10,
+    "bonus_aktivni": true,
+    "bonus_procenta": 30,
+    "ukoly": [
+        {
+            "id": "task_sluchátka a jod pro dandu",
+            "nazev": "sluchátka a jod pro dandu",
+            "minuty": 5,
+            "dni": 1,
+            "rezim": "jednorazovy",
+            "frekvence": null,
+            "reset_cas": "00:00",
+            "deadline": null,
+            "datum_vytvoreni": "2026-11-09",
+            "posledni_reset": "2026-11-09 19:17:32",
+            "hotovo": false
+        },
+        {
+            "id": "task_8503 kroků",
+            "nazev": "8503 kroků",
+            "minuty": 35,
+            "dni": 1,
+            "rezim": "jednorazovy",
+            "frekvence": null,
+            "reset_cas": "00:00",
+            "deadline": null,
+            "datum_vytvoreni": "2026-11-09",
+            "posledni_reset": "2026-11-09 19:17:32",
+            "hotovo": false
+        },
+        {
+            "id": "task_20261109192158034778",
+            "nazev": "vsvsv",
+            "minuty": 10,
+            "dni": 1,
+            "rezim": "jednorazovy",
+            "frekvence": null,
+            "reset_cas": "00:00",
+            "deadline": "2026-11-20",
+            "datum_vytvoreni": "2026-11-09",
+            "posledni_reset": "2026-11-09 19:21:58",
+            "hotovo": false
+        }
+    ],
+    "profily": [
+        "Kaja (k)",
+        "Danda (d)"
+    ],
+    "intervaly": [
+        [
+            1.0,
+            5.0,
+            0.01,
+            "pomer"
+        ],
+        [
+            5.01,
+            7.95,
+            0.05,
+            "pomer"
+        ],
+        [
+            7.95,
+            24.0,
+            5.0,
+            "pevna"
+        ],
+        [
+            7.95,
+            9.0,
+            0.05,
+            "pomer"
+        ],
+        [
+            9.0,
+            24.0,
+            0.15,
+            "pomer"
+        ]
+    ]
+}

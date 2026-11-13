@@ -57,9 +57,15 @@ TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 QUEUE_CHANNEL_ID = 1545914426639786015
 
 # --- Nastavení pro automatické aktualizace z GitHubu ---
-AKTUALNI_VERZE = "1.0.5"
+AKTUALNI_VERZE = "1.0.0"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
-APP_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/app.py"
+
+# Seznam všech souborů, které se mají z GitHubu automaticky stahovat a aktualizovat
+SOUBORY_K_AKTUALIZACI = [
+    "app.py",
+    "tasks.py",
+    # Sem můžeš kdykoliv dopisovat další soubory, které přidáš do projektu:
+]
 
 
 def nacti_token() -> str:
@@ -82,20 +88,24 @@ def zkontrolovat_aktualizace():
             if cloudu_verze and cloudu_verze != AKTUALNI_VERZE:
                 print(f"[UPDATE] Nalezena nová verze: {cloudu_verze} (máte: {AKTUALNI_VERZE})")
                 
-                with urllib.request.urlopen(APP_URL, timeout=5) as app_resp:
-                    novy_kod = app_resp.read().decode("utf-8")
+                for nazev_souboru in SOUBORY_K_AKTUALIZACI:
+                    url_souboru = f"https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/{nazev_souboru}"
+                    cesta_k_souboru = os.path.join(BASE_DIR, nazev_souboru)
                     
-                    starý_radek = f'AKTUALNI_VERZE = "{AKTUALNI_VERZE}"'
-                    nový_radek = f'AKTUALNI_VERZE = "{cloudu_verze}"'
-                    
-                    if starý_radek in novy_kod:
-                        novy_kod = novy_kod.replace(starý_radek, nový_radek)
-                    
-                    cesta_k_app = os.path.abspath(__file__)
-                    with open(cesta_k_app, "w", encoding="utf-8") as f:
-                        f.write(novy_kod)
+                    print(f"[UPDATE] Stahuji soubor: {nazev_souboru}...")
+                    with urllib.request.urlopen(url_souboru, timeout=5) as resp:
+                        obsah = resp.read().decode("utf-8")
+                        
+                        if nazev_souboru == "app.py":
+                            starý_radek = f'AKTUALNI_VERZE = "{AKTUALNI_VERZE}"'
+                            nový_radek = f'AKTUALNI_VERZE = "{cloudu_verze}"'
+                            if starý_radek in obsah:
+                                obsah = obsah.replace(starý_radek, nový_radek)
+                        
+                        with open(cesta_k_souboru, "w", encoding="utf-8") as f:
+                            f.write(obsah)
                 
-                print("[UPDATE] Aktualizace stažena a verze aktualizována. Restartuji aplikaci...")
+                print("[UPDATE] Všechny soubory úspěšně aktualizovány. Restartuji aplikaci...")
                 os.execv(sys.executable, [sys.executable] + sys.argv)
                 
     except Exception as e:

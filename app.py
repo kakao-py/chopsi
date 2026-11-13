@@ -98,7 +98,8 @@ def zkontrolovat_aktualizace():
                     
                     print(f"[UPDATE] Stahuji: {nazev_souboru}")
                     with urllib.request.urlopen(url_souboru, timeout=5) as resp:
-                        obsah = resp.read().decode("utf-8")
+                        # Stáhneme binárně a převedeme s jednotným koncem řádku (\n)
+                        obsah = resp.read().decode("utf-8").replace("\r\n", "\n")
                         
                         if nazev_souboru == "app.py":
                             starý_radek = f'AKTUALNI_VERZE = "{AKTUALNI_VERZE}"'
@@ -106,7 +107,8 @@ def zkontrolovat_aktualizace():
                             if starý_radek in obsah:
                                 obsah = obsah.replace(starý_radek, nový_radek)
                         
-                        with open(cesta_k_souboru, "w", encoding="utf-8") as f:
+                        # Zápis s newline="", aby Windows negeneroval vlastní prázdné řádky navíc
+                        with open(cesta_k_souboru, "w", encoding="utf-8", newline="") as f:
                             f.write(obsah)
                 
                 print("[UPDATE] Všechny soubory úspěšně aktualizovány. Restartuji aplikaci...")

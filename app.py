@@ -98,7 +98,7 @@ def zkontrolovat_aktualizace():
                     
                     print(f"[UPDATE] Stahuji: {nazev_souboru}")
                     with urllib.request.urlopen(url_souboru, timeout=5) as resp:
-                        # Stáhneme binárně a převedeme s jednotným koncem řádku (\n)
+                        # Tady se sjednotí konce řádků na čistý formát z GitHubu
                         obsah = resp.read().decode("utf-8").replace("\r\n", "\n")
                         
                         if nazev_souboru == "app.py":
@@ -107,7 +107,7 @@ def zkontrolovat_aktualizace():
                             if starý_radek in obsah:
                                 obsah = obsah.replace(starý_radek, nový_radek)
                         
-                        # Zápis s newline="", aby Windows negeneroval vlastní prázdné řádky navíc
+                        # Parametr newline="" zabrání Windows v přidávání prázdných řádků
                         with open(cesta_k_souboru, "w", encoding="utf-8", newline="") as f:
                             f.write(obsah)
                 

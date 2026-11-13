@@ -57,16 +57,17 @@ TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 QUEUE_CHANNEL_ID = 1545914426639786015
 
 # --- Nastavení pro automatické aktualizace z GitHubu ---
-AKTUALNI_VERZE = "1.0.0"
+AKTUALNI_VERZE = "1.0.6"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
 
 # Seznam všech souborů, které se mají z GitHubu automaticky stahovat a aktualizovat
 SOUBORY_K_AKTUALIZACI = [
     "app.py",
     "tasks.py",
-    # Sem můžeš kdykoliv dopisovat další soubory, které přidáš do projektu:
+    "ui/ui.py",
+    "ui/settings.py",
+    "ui/profile_dialog.py",
 ]
-
 
 def nacti_token() -> str:
     if os.path.exists(TOKEN_FILE):
@@ -80,19 +81,24 @@ def nacti_token() -> str:
 
 
 def zkontrolovat_aktualizace():
+    print(f"[UPDATE] Spouštím kontrolu aktualizací... Moje verze: {AKTUALNI_VERZE}")
     try:
-        with urllib.request.urlopen(VERSION_URL, timeout=3) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(VERSION_URL, timeout=5) as response:
+            raw_data = response.read().decode("utf-8")
+            data = json.loads(raw_data)
             cloudu_verze = data.get("version")
             
             if cloudu_verze and cloudu_verze != AKTUALNI_VERZE:
-                print(f"[UPDATE] Nalezena nová verze: {cloudu_verze} (máte: {AKTUALNI_VERZE})")
+                print(f"[UPDATE] Nalezena nová verze {cloudu_verze}! Stahuji soubory...")
                 
                 for nazev_souboru in SOUBORY_K_AKTUALIZACI:
                     url_souboru = f"https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/{nazev_souboru}"
                     cesta_k_souboru = os.path.join(BASE_DIR, nazev_souboru)
                     
-                    print(f"[UPDATE] Stahuji soubor: {nazev_souboru}...")
+                    # Automaticky vytvoří podsložku (např. 'ui'), pokud ještě neexistuje
+                    os.makedirs(os.path.dirname(cesta_k_souboru), exist_ok=True)
+                    
+                    print(f"[UPDATE] Stahuji: {nazev_souboru}")
                     with urllib.request.urlopen(url_souboru, timeout=5) as resp:
                         obsah = resp.read().decode("utf-8")
                         
@@ -107,11 +113,11 @@ def zkontrolovat_aktualizace():
                 
                 print("[UPDATE] Všechny soubory úspěšně aktualizovány. Restartuji aplikaci...")
                 os.execv(sys.executable, [sys.executable] + sys.argv)
+            else:
+                print("[UPDATE] Aplikace je již aktuální.")
                 
     except Exception as e:
-        print(f"[UPDATE] Kontrola aktualizací selhala (offline?): {e}")
-
-
+        print(f"[UPDATE CHYBA] Kontrola aktualizací selhala: {e}")
 # --- Komunikační můstek pro bezpečné předávání úkolů z vlákna bota do GUI ---
 class DiscordBridge(QObject):
     ukol_pridat = Signal(dict)

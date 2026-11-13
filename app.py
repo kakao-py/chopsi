@@ -57,7 +57,7 @@ TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 QUEUE_CHANNEL_ID = 1545914426639786015
 
 # --- Nastavení pro automatické aktualizace z GitHubu ---
-AKTUALNI_VERZE = "1.0.6"
+AKTUALNI_VERZE = "1.0.1"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
 
 # Seznam všech souborů, které se mají z GitHubu automaticky stahovat a aktualizovat
@@ -79,7 +79,6 @@ def nacti_token() -> str:
             print(f"[CHYBA] Nelze načíst token.json: {e}")
     return ""
 
-
 def zkontrolovat_aktualizace():
     print(f"[UPDATE] Spouštím kontrolu aktualizací... Moje verze: {AKTUALNI_VERZE}")
     try:
@@ -95,7 +94,6 @@ def zkontrolovat_aktualizace():
                     url_souboru = f"https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/{nazev_souboru}"
                     cesta_k_souboru = os.path.join(BASE_DIR, nazev_souboru)
                     
-                    # Automaticky vytvoří podsložku (např. 'ui'), pokud ještě neexistuje
                     os.makedirs(os.path.dirname(cesta_k_souboru), exist_ok=True)
                     
                     print(f"[UPDATE] Stahuji: {nazev_souboru}")
@@ -118,12 +116,12 @@ def zkontrolovat_aktualizace():
                 
     except Exception as e:
         print(f"[UPDATE CHYBA] Kontrola aktualizací selhala: {e}")
+
 # --- Komunikační můstek pro bezpečné předávání úkolů z vlákna bota do GUI ---
 class DiscordBridge(QObject):
     ukol_pridat = Signal(dict)
 
 discord_bridge = DiscordBridge()
-
 
 def vytvor_fajfku_png() -> str:
     svg_data = b"<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'><path fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' d='M20 6L9 17l-5-5'/></svg>"
@@ -140,7 +138,6 @@ def vytvor_fajfku_png() -> str:
     path = os.path.join(img_dir, "temp_check.png")
     pixmap.save(path, "PNG")
     return path.replace("\\", "/")
-
 
 # ===================================================
 # ============== Globální stav aplikace =============
@@ -169,7 +166,6 @@ bonus_procenta = 30
 pravidla_intervaly = VYCHOZI_INTERVALY
 
 zpracovane_zpravy_ids = set()
-
 
 def nacti_stav() -> dict:
     global bot_typ_filtru, bonus_aktivni, bonus_procenta, nasobitel_ponocovani, queue_interval_sekund, zpracovane_zpravy_ids, pravidla_intervaly
@@ -202,7 +198,6 @@ def nacti_stav() -> dict:
         "pravidla_intervaly": VYCHOZI_INTERVALY
     }
 
-
 def uloz_stav(dnes_str: str, sekund: float, max_sekund: float, bedtimes: dict, rezerva: int):
     global bot_typ_filtru, bonus_aktivni, bonus_procenta, nasobitel_ponocovani, queue_interval_sekund, zpracovane_zpravy_ids, pravidla_intervaly
     data = {
@@ -222,10 +217,8 @@ def uloz_stav(dnes_str: str, sekund: float, max_sekund: float, bedtimes: dict, r
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-
 def generuj_task_id() -> str:
     return f"task_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-
 
 def formatuj_cas(sekundy: float) -> str:
     zaporne = sekundy < 0
@@ -234,7 +227,6 @@ def formatuj_cas(sekundy: float) -> str:
     minuty = celkove_minuty % 60
     s = f"{hodiny:02d}:{minuty:02d}"
     return f"-{s}" if zaporne else s
-
 
 def aktualizuj_cas_display(night_time_label, sekundy: float):
     vysledek = formatuj_cas(sekundy)
@@ -263,14 +255,12 @@ def aktualizuj_cas_display(night_time_label, sekundy: float):
                 else:
                     lbl.text = novy_text
 
-
 def nacti_sekundy_z_hhmm(text: str) -> int:
     text = text.strip()
     if ":" in text:
         casti = text.split(":")
         return (int(casti[0]) * 3600) + (int(casti[1]) * 60)
     return int(text) * 3600
-
 
 def vypocitej_cas_ponocovani(sekundy_spanku: float, rezerva: int = 10, pravidla_intervaly: list = None) -> int:
     minuty_spanku = (sekundy_spanku / 60.0) + rezerva
@@ -310,11 +300,9 @@ def vypocitej_cas_ponocovani(sekundy_spanku: float, rezerva: int = 10, pravidla_
     celkova_odmena_minut = posledni_pevna_odmena + pomerova_odmena_minut
     return int(celkova_odmena_minut * 60)
 
-
 def ziskej_rozmer(obj, atribute_name: str, default: int) -> int:
     val = getattr(obj, atribute_name, default)
     return val() if callable(val) else val
-
 
 def aktualizuj_progress_bar(ui: dict, aktualni: float, max_val: float):
     pb = ui["page_0"].get("night_progress")
@@ -375,7 +363,6 @@ def aktualizuj_progress_bar(ui: dict, aktualni: float, max_val: float):
             overlay_label.setGeometry(0, 0, w, h)
             overlay_label.setText(text_html)
             overlay_label.raise_()
-
 
 # ===================================================
 # ============== INTERNÍ DISCORD BOT ===============
@@ -623,7 +610,6 @@ def spustit_discord_bota():
     except Exception as e:
         print(f"[BOT CHYBA] Klienta se nepodařilo spustit: {e}")
 
-
 # ===================================================
 # ============== EVENT BINDINGS & LOGIC =============
 # ===================================================
@@ -640,7 +626,6 @@ class TrayEventFilter(QObject):
             event.ignore()
             return True
         return super().eventFilter(obj, event)
-
 
 def attach_events(ui: dict):
     global timer, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut
@@ -1298,7 +1283,6 @@ def attach_events(ui: dict):
     timer.timeout.connect(tik_odpocitavani)
     timer.start(1000)
 
-
 # ===================================================
 # ============== MAIN FUNCTION ======================
 # ===================================================
@@ -1367,7 +1351,6 @@ def main():
     qt_win.show()
 
     sys.exit(q_app.exec())
-
 
 if __name__ == '__main__':
     main()

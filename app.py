@@ -7,6 +7,7 @@ import sys
 import threading
 import glob
 import random
+import urllib.request
 
 import discord
 from discord import app_commands
@@ -51,8 +52,48 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 
 STATE_FILE = os.path.join(BASE_DIR, "state.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 
 QUEUE_CHANNEL_ID = 1545914426639786015
+
+# --- Nastavení pro automatické aktualizace z GitHubu ---
+AKTUALNI_VERZE = "1.0.0"
+VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/main/version.json"
+APP_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/main/app.py"
+
+
+def nacti_token() -> str:
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("bot_token", "").strip()
+        except Exception as e:
+            print(f"[CHYBA] Nelze načíst token.json: {e}")
+    return ""
+
+
+def zkontrolovat_aktualizace():
+    try:
+        with urllib.request.urlopen(VERSION_URL, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            cloudu_verze = data.get("version")
+            
+            if cloudu_verze and cloudu_verze != AKTUALNI_VERZE:
+                print(f"[UPDATE] Nalezena nová verze: {cloudu_verze} (máte: {AKTUALNI_VERZE})")
+                
+                with urllib.request.urlopen(APP_URL, timeout=5) as app_resp:
+                    novy_kod = app_resp.read()
+                    
+                    cesta_k_app = os.path.abspath(__file__)
+                    with open(cesta_k_app, "wb") as f:
+                        f.write(novy_kod)
+                
+                print("[UPDATE] Aktualizace stažena. Restartuji aplikaci...")
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+    except Exception as e:
+        print(f"[UPDATE] Kontrola aktualizací selhala (offline?): {e}")
 
 
 # --- Komunikační můstek pro bezpečné předávání úkolů z vlákna bota do GUI ---
@@ -320,6 +361,11 @@ def aktualizuj_progress_bar(ui: dict, aktualni: float, max_val: float):
 
 def spustit_discord_bota():
     nacti_stav()
+    token = nacti_token()
+    if not token:
+        print("[BOT CHYBA] Chybí bot_token v souboru token.json!")
+        return
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -506,14 +552,14 @@ def spustit_discord_bota():
                                     except Exception:
                                         pass
 
-                                    async def smaz_vypis_po_puli_hodine(msg_to_del):
+                                    async def smaz_vypis_po_deseti_minutach(msg_to_del):
                                         await asyncio.sleep(600)
                                         try:
                                             await msg_to_del.delete()
                                         except Exception:
                                             pass
 
-                                    asyncio.create_task(smaz_vypis_po_puli_hodine(sent_msg))
+                                    asyncio.create_task(smaz_vypis_po_deseti_minutach(sent_msg))
 
                     except Exception as e:
                         print(f"[BOT CHYBA QUEUE] Chyba při zpracování zprávy: {e}")
@@ -550,9 +596,8 @@ def spustit_discord_bota():
             client.task_started = True
             asyncio.create_task(periodicka_kontrola_fronty())
 
-    BOT_TOKEN = "MTU0MzIxNzE3NDgwMDIzNjY2NA.Gxp-4-.Qx_oPTGDKHeROJ-jw-JY5K3KFcg9YwRx7oM-2k"
     try:
-        client.run(BOT_TOKEN)
+        client.run(token)
     except Exception as e:
         print(f"[BOT CHYBA] Klienta se nepodařilo spustit: {e}")
 
@@ -1237,6 +1282,8 @@ def attach_events(ui: dict):
 # ===================================================
 
 def main():
+    zkontrolovat_aktualizace()
+
     bot_thread = threading.Thread(target=spustit_discord_bota, daemon=True)
     bot_thread.start()
 

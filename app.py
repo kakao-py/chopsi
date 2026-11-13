@@ -57,7 +57,7 @@ TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 QUEUE_CHANNEL_ID = 1545914426639786015
 
 # --- Nastavení pro automatické aktualizace z GitHubu ---
-AKTUALNI_VERZE = "1.0.0"
+AKTUALNI_VERZE = "1.0.3"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
 APP_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/app.py"
 

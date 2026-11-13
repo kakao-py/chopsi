@@ -59,7 +59,7 @@ QUEUE_CHANNEL_ID = 1545914426639786015
 # --- Nastavení pro automatické aktualizace z GitHubu ---
 AKTUALNI_VERZE = "1.0.0"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
-APP_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/main/app.py"
+APP_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/app.py"
 
 
 def nacti_token() -> str:
@@ -83,13 +83,19 @@ def zkontrolovat_aktualizace():
                 print(f"[UPDATE] Nalezena nová verze: {cloudu_verze} (máte: {AKTUALNI_VERZE})")
                 
                 with urllib.request.urlopen(APP_URL, timeout=5) as app_resp:
-                    novy_kod = app_resp.read()
+                    novy_kod = app_resp.read().decode("utf-8")
+                    
+                    starý_radek = f'AKTUALNI_VERZE = "{AKTUALNI_VERZE}"'
+                    nový_radek = f'AKTUALNI_VERZE = "{cloudu_verze}"'
+                    
+                    if starý_radek in novy_kod:
+                        novy_kod = novy_kod.replace(starý_radek, nový_radek)
                     
                     cesta_k_app = os.path.abspath(__file__)
-                    with open(cesta_k_app, "wb") as f:
+                    with open(cesta_k_app, "w", encoding="utf-8") as f:
                         f.write(novy_kod)
                 
-                print("[UPDATE] Aktualizace stažena. Restartuji aplikaci...")
+                print("[UPDATE] Aktualizace stažena a verze aktualizována. Restartuji aplikaci...")
                 os.execv(sys.executable, [sys.executable] + sys.argv)
                 
     except Exception as e:

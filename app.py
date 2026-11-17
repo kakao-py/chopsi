@@ -1,16 +1,16 @@
-import asyncio
-import ctypes
-from datetime import date, datetime, timedelta, timezone
-import json
 import os
 import sys
+import json
+import urllib.request
+import subprocess
+import asyncio
+from datetime import date, datetime, timedelta, timezone
 import threading
 import glob
 import random
-import urllib.request
+import ctypes
 
 import discord
-from discord import app_commands
 from PySide6.QtCore import QByteArray, QEvent, QObject, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -60,7 +60,6 @@ QUEUE_CHANNEL_ID = 1545914426639786015
 AKTUALNI_VERZE = "1.0.1"
 VERSION_URL = "https://raw.githubusercontent.com/kakao-py/chopsi/refs/heads/main/version.json"
 
-# Seznam všech souborů, které se mají z GitHubu automaticky stahovat a aktualizovat
 SOUBORY_K_AKTUALIZACI = [
     "app.py",
     "tasks.py",
@@ -69,17 +68,8 @@ SOUBORY_K_AKTUALIZACI = [
     "ui/profile_dialog.py",
 ]
 
-def nacti_token() -> str:
-    if os.path.exists(TOKEN_FILE):
-        try:
-            with open(TOKEN_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("bot_token", "").strip()
-        except Exception as e:
-            print(f"[CHYBA] Nelze načíst token.json: {e}")
-    return ""
-
-def zkontrolovat_aktualizace():
+def zkontrolovat_a_aktualizovat() -> bool:
+    """Zkontroluje aktualizace, stáhne nové soubory a vrátí True, pokud proběhl restart."""
     print(f"[UPDATE] Spouštím kontrolu aktualizací... Moje verze: {AKTUALNI_VERZE}")
     try:
         with urllib.request.urlopen(VERSION_URL, timeout=5) as response:
@@ -98,7 +88,6 @@ def zkontrolovat_aktualizace():
                     
                     print(f"[UPDATE] Stahuji: {nazev_souboru}")
                     with urllib.request.urlopen(url_souboru, timeout=5) as resp:
-                        # Tady se sjednotí konce řádků na čistý formát z GitHubu
                         obsah = resp.read().decode("utf-8").replace("\r\n", "\n")
                         
                         if nazev_souboru == "app.py":
@@ -107,17 +96,29 @@ def zkontrolovat_aktualizace():
                             if starý_radek in obsah:
                                 obsah = obsah.replace(starý_radek, nový_radek)
                         
-                        # Parametr newline="" zabrání Windows v přidávání prázdných řádků
                         with open(cesta_k_souboru, "w", encoding="utf-8", newline="") as f:
                             f.write(obsah)
                 
                 print("[UPDATE] Všechny soubory úspěšně aktualizovány. Restartuji aplikaci...")
                 os.execv(sys.executable, [sys.executable] + sys.argv)
+                return True
             else:
                 print("[UPDATE] Aplikace je již aktuální.")
+                return False
                 
     except Exception as e:
-        print(f"[UPDATE CHYBA] Kontrola aktualizací selhala: {e}")
+        print(f"[UPDATE CHYBA] Kontrola aktualizací selhala (pokračuji se stávající verzí): {e}")
+        return False
+
+def nacti_token() -> str:
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("bot_token", "").strip()
+        except Exception as e:
+            print(f"[CHYBA] Nelze načíst token.json: {e}")
+    return ""
 
 # --- Komunikační můstek pro bezpečné předávání úkolů z vlákna bota do GUI ---
 class DiscordBridge(QObject):
@@ -269,12 +270,7 @@ def vypocitej_cas_ponocovani(sekundy_spanku: float, rezerva: int = 10, pravidla_
     hodiny_spanku = minuty_spanku / 60.0
 
     if pravidla_intervaly is None:
-        pravidla_intervaly = VYCHOZI_INTERVALY if 'VYCHOZI_INTERVALY' in globals() else [
-            {"od": 4.0, "do": 7.0, "typ": "pevna", "odmena": 10},
-            {"od": 7.0, "do": 8.0, "typ": "pevna", "odmena": 12},
-            {"od": 8.0, "do": 9.0, "typ": "pevna", "odmena": 30},
-            {"od": 9.0, "do": 24.0, "typ": "pomer", "odmena": 0.05},
-        ]
+        pravidla_intervaly = VYCHOZI_INTERVALY
 
     posledni_pevna_odmena = 0
     pomerova_odmena_minut = 0.0
@@ -428,9 +424,8 @@ def spustit_discord_bota():
                 if treba_smazat:
                     try:
                         await msg.delete()
-                        print(f"[BOT CLEANUP] Smazána vypršená/stará žádost ID {msg.id}")
-                    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-                        print(f"[BOT CLEANUP] Nelze smazat zprávu {msg.id}: {e}")
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[BOT CLEANUP CHYBA] Nelze projít historii kanálu: {e}")
 
@@ -487,7 +482,6 @@ def spustit_discord_bota():
 
                                 dnes_str = date.today().strftime("%Y-%m-%d")
                                 uloz_stav(dnes_str, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut)
-                                print(f"[FRONTA] Přijata a uplatněna odměna: +{minuty} minut pro profil {target}.")
 
                             elif cmd_type == "ukol":
                                 ukoly = nacti_ukoly()
@@ -496,7 +490,6 @@ def spustit_discord_bota():
                                     if not any(u.get("id") == novy_ukol.get("id") for u in ukoly):
                                         ukoly.append(novy_ukol)
                                         uloz_ukoly(ukoly)
-                                        print(f"[FRONTA] Přijat nový úkol z Discordu: {novy_ukol.get('nazev')} (profil: {target})")
                                         discord_bridge.ukol_pridat.emit(novy_ukol)
 
                             elif cmd_type == "smazat_ukol":
@@ -509,7 +502,6 @@ def spustit_discord_bota():
                                     u_nazev = u.get("nazev", "").lower()
                                     if hovory_nazev in u_nazev or u_nazev in hovory_nazev:
                                         smazano = True
-                                        print(f"[FRONTA] Smazán úkol na základě Discord příkazu: {u.get('nazev')}")
                                     else:
                                         nove_ukoly.append(u)
                                         
@@ -522,12 +514,7 @@ def spustit_discord_bota():
                                 cilovy_profil = data.get("target", "v")
                                 
                                 aktualni_ukoly = nacti_ukoly()
-                                
-                                vyfiltrovane = []
-                                for u in aktualni_ukoly:
-                                    u_typ = u.get("typ", "v").lower()
-                                    if cilovy_profil == "v" or u_typ == "v" or u_typ == cilovy_profil:
-                                        vyfiltrovane.append(u)
+                                vyfiltrovane = [u for u in aktualni_ukoly if cilovy_profil == "v" or u.get("typ", "v").lower() in ("v", cilovy_profil)]
 
                                 if not vyfiltrovane:
                                     text_vypisu = f"📋 **Seznam úkolů pro profil: {cilovy_profil.upper()}** *(žádné aktivní úkoly)*"
@@ -545,9 +532,6 @@ def spustit_discord_bota():
                                         stav = "✅" if u.get("hotovo", False) else "⏳"
                                         text_vypisu += f"{i}. {stav} **{nazev}** (+{minuty} min) — *{info}*\n"
 
-                                if len(text_vypisu) > 2000:
-                                    text_vypisu = text_vypisu[:1997] + "..."
-
                                 target_channel = client.get_channel(reply_channel_id)
                                 if not target_channel and reply_channel_id:
                                     try:
@@ -557,7 +541,6 @@ def spustit_discord_bota():
 
                                 if target_channel:
                                     sent_msg = await target_channel.send(text_vypisu)
-                                    
                                     try:
                                         await msg.delete()
                                     except Exception:
@@ -591,16 +574,9 @@ def spustit_discord_bota():
     @client.event
     async def on_ready():
         print(f"[BOT] Klient aplikace připojen k Discordu jako {client.user.name}!")
-        
         if QUEUE_CHANNEL_ID:
-            channel = client.get_channel(QUEUE_CHANNEL_ID)
-            if not channel:
-                try:
-                    channel = await client.fetch_channel(QUEUE_CHANNEL_ID)
-                except Exception:
-                    channel = None
+            channel = client.get_channel(QUEUE_CHANNEL_ID) or await client.fetch_channel(QUEUE_CHANNEL_ID)
             if channel:
-                print("[BOT] Provádím startovní úklid vypršených a starých žádostí...")
                 await vycisti_stare_zadosti(channel)
 
         if not getattr(client, "task_started", False):
@@ -689,26 +665,15 @@ def attach_events(ui: dict):
         tray_icon.hide()
         sys.exit(0)
 
-    action_show = tray_menu.addAction("Otevřít")
-    action_show.triggered.connect(show_window)
+    tray_menu.addAction("Otevřít").triggered.connect(show_window)
     tray_menu.addSeparator()
-    action_quit = tray_menu.addAction("Ukončit")
-    action_quit.triggered.connect(quit_app)
+    tray_menu.addAction("Ukončit").triggered.connect(quit_app)
 
     tray_icon.setContextMenu(tray_menu)
-
-    def tray_activated(reason):
-        if reason == QSystemTrayIcon.Trigger:
-            if qt_win.isVisible():
-                qt_win.hide()
-            else:
-                show_window()
-
-    tray_icon.activated.connect(tray_activated)
+    tray_icon.activated.connect(lambda r: (qt_win.hide() if qt_win.isVisible() else show_window()) if r == QSystemTrayIcon.Trigger else None)
     tray_icon.show()
 
-    tray_filter = TrayEventFilter(qt_win, tray_icon)
-    qt_win.installEventFilter(tray_filter)
+    qt_win.installEventFilter(TrayEventFilter(qt_win, tray_icon))
 
     posledni_datum = stav.get("last_date", "")
     ukoly = nacti_ukoly()
@@ -731,7 +696,6 @@ def attach_events(ui: dict):
     main_layout = QVBoxLayout(container_ukolu)
     main_layout.setContentsMargins(4, 8, 4, 4)
 
-    # --- ZCELA ODDĚLENÝ BLOK VEČERKY ---
     vecerka_widget = QWidget()
     vecerka_vlayout = QVBoxLayout(vecerka_widget)
     vecerka_vlayout.setContentsMargins(0, 160, 0, 0)
@@ -766,11 +730,8 @@ def attach_events(ui: dict):
     vecerka_vlayout.addWidget(dnesni_vecerka_label)
     vecerka_vlayout.addWidget(vecerka_row2)
 
-    pouzity_layout = container_ponocovani.layout()
-    if pouzity_layout is None:
-        pouzity_layout = QVBoxLayout(container_ponocovani)
-        pouzity_layout.setContentsMargins(0, 0, 0, 0)
-
+    pouzity_layout = container_ponocovani.layout() or QVBoxLayout(container_ponocovani)
+    pouzity_layout.setContentsMargins(0, 0, 0, 0)
     pouzity_layout.addWidget(vecerka_widget)
 
     def aktualizuj_label_vecerky():
@@ -779,7 +740,6 @@ def attach_events(ui: dict):
         dnesni_den_idx = str(logicky_den.weekday())
         
         h = jednorazova_vecerka if jednorazova_vecerka is not None else float(nastaveni_vecerky.get(dnesni_den_idx, 22))
-        
         hodiny = int(h)
         minuty = int((h - hodiny) * 60)
         dnesni_vecerka_label.setText(f"Dnešní večerka: {hodiny:02d}:{minuty:02d}")
@@ -831,25 +791,11 @@ def attach_events(ui: dict):
     scroll_area = QScrollArea(container_ukolu)
     scroll_area.setWidgetResizable(True)
     scroll_area.setStyleSheet("""
-        QScrollArea {
-            background: transparent;
-            border: none;
-        }
-        QScrollArea > QWidget > QWidget {
-            background: transparent;
-        }
-        QScrollBar:vertical {
-            background: transparent;
-            width: 6px;
-            margin: 0px;
-        }
-        QScrollBar::handle:vertical {
-            background: rgba(13, 92, 86, 120);
-            border-radius: 3px;
-        }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
+        QScrollArea { background: transparent; border: none; }
+        QScrollArea > QWidget > QWidget { background: transparent; }
+        QScrollBar:vertical { background: transparent; width: 6px; margin: 0px; }
+        QScrollBar::handle:vertical { background: rgba(13, 92, 86, 120); border-radius: 3px; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
     """)
 
     content_widget = QWidget()
@@ -906,21 +852,11 @@ def attach_events(ui: dict):
                     try:
                         dl_date = datetime.strptime(deadline, "%Y-%m-%d").date()
                         rozdil_dni = (dl_date - dnes).days
-
-                        if rozdil_dni == 0:
-                            zbyva_str = "(dnes)"
-                        elif rozdil_dni == 1:
-                            zbyva_str = "(1 den)"
-                        elif 1 < rozdil_dni < 5:
-                            zbyva_str = f"({rozdil_dni} dny)"
-                        else:
-                            zbyva_str = f"({rozdil_dni} dní)"
-
-                        if zbyva_str:
-                            zbyva_label = QLabel(zbyva_str)
-                            zbyva_label.setAlignment(Qt.AlignCenter)
-                            zbyva_label.setStyleSheet("color: #0d5c56; font-size: 11px; font-weight: bold; background: transparent;")
-                            left_layout.addWidget(zbyva_label, 0, Qt.AlignCenter)
+                        zbyva_str = "(dnes)" if rozdil_dni == 0 else ("(1 den)" if rozdil_dni == 1 else (f"({rozdil_dni} dny)" if 1 < rozdil_dni < 5 else f"({rozdil_dni} dní)"))
+                        zbyva_label = QLabel(zbyva_str)
+                        zbyva_label.setAlignment(Qt.AlignCenter)
+                        zbyva_label.setStyleSheet("color: #0d5c56; font-size: 11px; font-weight: bold; background: transparent;")
+                        left_layout.addWidget(zbyva_label, 0, Qt.AlignCenter)
                     except ValueError:
                         pass
 
@@ -930,33 +866,15 @@ def attach_events(ui: dict):
             is_done = u.get("hotovo", False)
             cb.setChecked(is_done)
             cb.setStyleSheet(f"""
-                QCheckBox {{
-                    spacing: 0px;
-                    margin: 0px;
-                    padding: 2px 0px;
-                }}
-                QCheckBox::indicator {{
-                    width: 15px;
-                    height: 15px;
-                    border: 1.5px solid #17d1c6;
-                    border-radius: 4px;
-                    background: transparent;
-                }}
-                QCheckBox::indicator:checked {{
-                    background-color: rgb(30, 218, 98);
-                    border-color: rgb(20, 180, 80);
-                    image: url("{check_png_path}");
-                }}
+                QCheckBox {{ spacing: 0px; margin: 0px; padding: 2px 0px; }}
+                QCheckBox::indicator {{ width: 15px; height: 15px; border: 1.5px solid #17d1c6; border-radius: 4px; background: transparent; }}
+                QCheckBox::indicator:checked {{ background-color: rgb(30, 218, 98); border-color: rgb(20, 180, 80); image: url("{check_png_path}"); }}
             """)
             row_layout.addWidget(cb)
 
             text_label = QLabel(u['nazev'])
             text_label.setWordWrap(True)
-            if is_done:
-                text_label.setStyleSheet("color: #888888; text-decoration: line-through; font-size: 11px; font-weight: bold; background: transparent;")
-            else:
-                text_label.setStyleSheet("color: #0d5c56; font-size: 11px; font-weight: bold; background: transparent;")
-
+            text_label.setStyleSheet("color: #888888; text-decoration: line-through; font-size: 11px; font-weight: bold; background: transparent;" if is_done else "color: #0d5c56; font-size: 11px; font-weight: bold; background: transparent;")
             text_label.mousePressEvent = lambda event, c=cb: c.setChecked(not c.isChecked())
             row_layout.addWidget(text_label, 1)
 
@@ -970,50 +888,23 @@ def attach_events(ui: dict):
             edit_btn = QPushButton("✎")
             edit_btn.setFixedSize(20, 18)
             edit_btn.setToolTip("Upravit úkol")
-            edit_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    color: #0d5c56;
-                    font-weight: bold;
-                    font-size: 11px;
-                    border: none;
-                    border-radius: 3px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(23, 209, 198, 40);
-                }
-            """)
+            edit_btn.setStyleSheet("QPushButton { background-color: transparent; color: #0d5c56; font-weight: bold; font-size: 11px; border: none; border-radius: 3px; } QPushButton:hover { background-color: rgba(23, 209, 198, 40); }")
 
             del_btn = QPushButton("×")
             del_btn.setFixedSize(20, 18)
             del_btn.setToolTip("Smazat úkol")
-            del_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    color: #d9534f;
-                    font-weight: bold;
-                    font-size: 13px;
-                    border: none;
-                    border-radius: 3px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(217, 83, 79, 30);
-                }
-            """)
+            del_btn.setStyleSheet("QPushButton { background-color: transparent; color: #d9534f; font-weight: bold; font-size: 13px; border: none; border-radius: 3px; } QPushButton:hover { background-color: rgba(217, 83, 79, 30); }")
 
             right_buttons_layout.addWidget(edit_btn, 0, Qt.AlignCenter)
             right_buttons_layout.addWidget(del_btn, 0, Qt.AlignCenter)
-
             row_layout.addWidget(right_buttons_container)
 
             def make_handler(ukol_ref, checkbox_ref, label_ref):
                 def on_change(state):
                     global celkovy_cas_sekund, max_cas_sekund
                     je_hotovo = checkbox_ref.isChecked()
-
                     if ukol_ref["hotovo"] != je_hotovo:
                         ukol_ref["hotovo"] = je_hotovo
-
                         ziskane_minuty = spocitej_hodnotu_ukolu(ukol_ref, bonus_aktivni, bonus_procenta)
                         pridano_sekund = ziskane_minuty * 60
 
@@ -1028,7 +919,6 @@ def attach_events(ui: dict):
 
                         aktualizuj_cas_display(night_time_label, celkovy_cas_sekund)
                         aktualizuj_progress_bar(ui, celkovy_cas_sekund, max_cas_sekund)
-
                         uloz_stav(dnes_str, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut)
                         uloz_ukoly(ukoly)
                 return on_change
@@ -1041,16 +931,9 @@ def attach_events(ui: dict):
                     dialog = AddTaskDialog(qt_win, task_data=ukol_ref)
                     if dialog.exec() == QDialog.Accepted:
                         nova_data = dialog.get_data()
-
                         stare_minuty = spocitej_hodnotu_ukolu(ukol_ref, bonus_aktivni, bonus_procenta) if ukol_ref.get("hotovo", False) else 0
 
-                        ukol_ref["nazev"] = nova_data["nazev"]
-                        ukol_ref["minuty"] = nova_data["minuty"]
-                        ukol_ref["rezim"] = nova_data["rezim"]
-                        ukol_ref["frekvence"] = nova_data["frekvence"]
-                        ukol_ref["reset_cas"] = nova_data["reset_cas"]
-                        ukol_ref["deadline"] = nova_data["deadline"]
-
+                        ukol_ref.update(nova_data)
                         nove_minuty = spocitej_hodnotu_ukolu(ukol_ref, bonus_aktivni, bonus_procenta) if ukol_ref.get("hotovo", False) else 0
                         rozdil = nove_minuty - stare_minuty
 
@@ -1075,7 +958,6 @@ def attach_events(ui: dict):
                 return on_click
 
             del_btn.clicked.connect(make_del_handler(u))
-
             layout_ukolu.addWidget(row_widget)
 
         layout_ukolu.addStretch(1)
@@ -1120,8 +1002,6 @@ def attach_events(ui: dict):
         pravidla_intervaly = nove_intervaly
 
         uloz_stav(dnes_str, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut)
-        
-        nonlocal ukoly
         vytvor_checkboxy()
         aktualizuj_label_vecerky()
 
@@ -1145,18 +1025,8 @@ def attach_events(ui: dict):
 
     def zobraz_toast(text="Zapsáno!", trvani_ms=2000, typ="success"):
         bg_color = "#2ecc71" if typ == "success" else "#d9534f"
-
         toast = QLabel(text, qt_win)
-        toast.setStyleSheet(f"""
-            QLabel {{
-                background-color: {bg_color};
-                color: white;
-                font-weight: bold;
-                font-size: 12px;
-                padding: 6px 16px;
-                border-radius: 12px;
-            }}
-        """)
+        toast.setStyleSheet(f"QLabel {{ background-color: {bg_color}; color: white; font-weight: bold; font-size: 12px; padding: 6px 16px; border-radius: 12px; }}")
         toast.adjustSize()
 
         win_w = ziskej_rozmer(qt_win, "width", 300)
@@ -1164,17 +1034,13 @@ def attach_events(ui: dict):
         toast_w = ziskej_rozmer(toast, "width", 100)
         toast_h = ziskej_rozmer(toast, "height", 30)
 
-        x = (win_w - toast_w) // 2
-        y = win_h - toast_h - 25
-        toast.move(x, y)
+        toast.move((win_w - toast_w) // 2, win_h - toast_h - 25)
         toast.show()
         toast.raise_()
-
         QTimer.singleShot(trvani_ms, toast.deleteLater)
 
     def potvrdit(*args):
         global celkovy_cas_sekund, max_cas_sekund
-
         hodnota_text = str(getattr(sleep_input, "text", "")).strip()
         if not hodnota_text and hasattr(sleep_input, "get_text"):
             hodnota_text = str(sleep_input.get_text()).strip()
@@ -1188,34 +1054,21 @@ def attach_events(ui: dict):
         if hodnota_text:
             try:
                 sekundy_spanku = nacti_sekundy_z_hhmm(hodnota_text)
-                
                 stav_app = nacti_stav()
                 aktualni_intervaly = stav_app.get("pravidla_intervaly", stav_app.get("intervaly", VYCHOZI_INTERVALY))
                 
-                pridane_sekundy = vypocitej_cas_ponocovani(
-                    sekundy_spanku, 
-                    rezerva=rezerva_minut, 
-                    pravidla_intervaly=aktualni_intervaly
-                )
-
+                pridane_sekundy = vypocitej_cas_ponocovani(sekundy_spanku, rezerva=rezerva_minut, pravidla_intervaly=aktualni_intervaly)
                 celkovy_cas_sekund += pridane_sekundy
                 max_cas_sekund = celkovy_cas_sekund
 
                 aktualizuj_cas_display(night_time_label, celkovy_cas_sekund)
                 aktualizuj_progress_bar(ui, celkovy_cas_sekund, max_cas_sekund)
-
                 uloz_stav(dnes_str, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut)
 
-                if hasattr(sleep_input, "setText"):
-                    sleep_input.setText("")
-                if hasattr(sleep_input, "clear"):
-                    sleep_input.clear()
                 for t in targets:
                     if isinstance(t, QLineEdit):
                         t.clear()
-
                 zobraz_toast("Zapsáno!", typ="success")
-
             except (ValueError, IndexError):
                 zobraz_toast("Neplatný formát!", typ="error")
         else:
@@ -1236,48 +1089,33 @@ def attach_events(ui: dict):
             uz_bila_vecerka = False
             uz_byl_5min_pred_koncem = False
             uz_vyprsel_cas = False
-            
             jednorazova_vecerka = None
             if 'aktualizuj_label_vecerky' in globals():
                 globals()['aktualizuj_label_vecerky']()
 
         dnesni_den_idx = str(logicky_den.weekday())
-        
-        if jednorazova_vecerka is not None:
-            hodina_vecerky = float(jednorazova_vecerka)
-        else:
-            hodina_vecerky = float(nastaveni_vecerky.get(dnesni_den_idx, 22))
+        hodina_vecerky = float(jednorazova_vecerka) if jednorazova_vecerka is not None else float(nastaveni_vecerky.get(dnesni_den_idx, 22))
 
-        vecerka_datum = logicky_den
-        if hodina_vecerky < RANNI_HRANICE:
-            vecerka_datum = logicky_den + timedelta(days=1)
-
+        vecerka_datum = logicky_den + timedelta(days=1) if hodina_vecerky < RANNI_HRANICE else logicky_den
         vecerka_dt = datetime.combine(vecerka_datum, datetime.min.time()) + timedelta(hours=hodina_vecerky)
-        pred_vecerkou_dt = vecerka_dt - timedelta(minutes=5)
         konec_logickeho_dne_dt = datetime.combine(logicky_den + timedelta(days=1), datetime.min.time()) + timedelta(hours=RANNI_HRANICE)
 
-        if not uz_byl_5min_pred_vecerkou and pred_vecerkou_dt <= nyni < vecerka_dt:
+        if not uz_byl_5min_pred_vecerkou and (vecerka_dt - timedelta(minutes=5)) <= nyni < vecerka_dt:
             uz_byl_5min_pred_vecerkou = True
 
         if not uz_bila_vecerka and vecerka_dt <= nyni < vecerka_dt + timedelta(minutes=1):
             uz_bila_vecerka = True
             prehraj_nahodnou_pisen()
 
-        je_po_vecerce = vecerka_dt <= nyni < konec_logickeho_dne_dt
-
         aktualizuj_cas_display(night_time_label, celkovy_cas_sekund)
         aktualizuj_progress_bar(ui, celkovy_cas_sekund, max_cas_sekund)
 
-        if je_po_vecerce:
-            ubytek = nasobitel_ponocovani if celkovy_cas_sekund <= 0 else 1.0
-            celkovy_cas_sekund = round(celkovy_cas_sekund - ubytek, 2)
-
+        if vecerka_dt <= nyni < konec_logickeho_dne_dt:
+            celkovy_cas_sekund = round(celkovy_cas_sekund - (nasobitel_ponocovani if celkovy_cas_sekund <= 0 else 1.0), 2)
             if not uz_byl_5min_pred_koncem and 0 < celkovy_cas_sekund <= 300:
                 uz_byl_5min_pred_koncem = True
-
             if not uz_vyprsel_cas and celkovy_cas_sekund <= 0:
                 uz_vyprsel_cas = True
-
             if int(celkovy_cas_sekund) % 60 == 0:
                 uloz_stav(dnes_str_lokal, celkovy_cas_sekund, max_cas_sekund, nastaveni_vecerky, rezerva_minut)
 
@@ -1285,20 +1123,13 @@ def attach_events(ui: dict):
     timer.timeout.connect(tik_odpocitavani)
     timer.start(1000)
 
-# ===================================================
-# ============== MAIN FUNCTION ======================
-# ===================================================
-
 def main():
-    zkontrolovat_aktualizace()
+    zkontrolovat_a_aktualizovat()
 
     bot_thread = threading.Thread(target=spustit_discord_bota, daemon=True)
     bot_thread.start()
 
-    q_app = QApplication.instance()
-    if not q_app:
-        q_app = QApplication(sys.argv)
-
+    q_app = QApplication.instance() or QApplication(sys.argv)
     q_app.setQuitOnLastWindowClosed(False)
     q_app.setWindowIcon(QIcon("assets/icons/night-cloud-fog-color-icon.ico"))
 
